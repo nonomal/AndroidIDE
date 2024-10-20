@@ -20,8 +20,7 @@
 <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License"></p>
 
 <p align="center">
-  <a href="https://androidide.com/docs/">Explore the docs »</a> &nbsp; &nbsp;
-  <a href="https://androidide.com/blogs/">Read our blog »</a>
+  <a href="https://docs.androidide.com/">Explore the docs »</a> &nbsp; &nbsp;
 </p>
 
 <p align="center">
@@ -30,7 +29,9 @@
   <a href="https://t.me/androidide_discussions">Join us on Telegram</a>
 </p>
 
-> **We are looking for contributors/maintainers to help keep the project alive and speed up the development. You can help by fixing bugs, implementing & improving features, writing documentation, etc.**
+> [!WARNING]
+> 
+> THIS PROJECT IS NOT MAINTAINED ANYMORE.
 
 ## Features
 

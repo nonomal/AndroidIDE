@@ -1,13 +1,77 @@
+/*
+ *  This file is part of AndroidIDE.
+ *
+ *  AndroidIDE is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  AndroidIDE is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *   along with AndroidIDE.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 @file:Suppress("UnstableApiUsage")
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
-  includeBuild("build-logic")
+  includeBuild("composite-builds/build-logic") {
+    name = "build-logic"
+  }
+
   repositories {
     gradlePluginPortal()
     google()
     mavenCentral()
+  }
+}
+
+dependencyResolutionManagement {
+  val dependencySubstitutions = mapOf(
+    "build-deps" to arrayOf(
+      "appintro",
+      "fuzzysearch",
+      "google-java-format",
+      "java-compiler",
+      "javac",
+      "javapoet",
+      "jaxp",
+      "jdk-compiler",
+      "jdk-jdeps",
+      "jdt",
+      "layoutlib-api",
+      "logback-core"
+    ),
+
+    "build-deps-common" to arrayOf(
+      "desugaring-core"
+    )
+  )
+
+  for ((build, modules) in dependencySubstitutions) {
+    includeBuild("composite-builds/${build}") {
+      this.name = build
+      dependencySubstitution {
+        for (module in modules) {
+          substitute(module("com.itsaky.androidide.build:${module}"))
+            .using(project(":${module}"))
+        }
+      }
+    }
+  }
+
+  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositories {
+    google()
+    mavenCentral()
+    maven { url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/") }
+    maven { url = uri("https://s01.oss.sonatype.org/content/groups/public/") }
+    maven { url = uri("https://jitpack.io") }
   }
 }
 
@@ -16,8 +80,23 @@ buildscript {
     mavenCentral()
   }
   dependencies {
-    classpath("com.mooltiverse.oss.nyx:gradle:2.5.1")
+    classpath("com.mooltiverse.oss.nyx:gradle:2.5.2")
   }
+}
+
+val isGitRepo by lazy {
+  cmdOutput("git", "rev-parse", "--is-inside-work-tree").trim() == "true"
+}
+
+private fun cmdOutput(vararg args: String): String {
+  return ProcessBuilder(*args)
+    .directory(File("."))
+    .redirectErrorStream(true)
+    .start()
+    .inputStream
+    .bufferedReader()
+    .readText()
+    .trim()
 }
 
 FDroidConfig.load(rootDir)
@@ -31,90 +110,74 @@ if (FDroidConfig.hasRead && FDroidConfig.isFDroidBuild) {
 
     project.setProperty("version", simpleVersion)
   }
-} else {
+} else if(isGitRepo) {
   apply {
     plugin("com.mooltiverse.oss.nyx")
   }
 }
 
-dependencyResolutionManagement {
-  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-  repositories {
-    google()
-    mavenCentral()
-    maven { url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/") }
-    maven { url = uri("https://s01.oss.sonatype.org/content/groups/public/") }
-    maven { url = uri("https://jitpack.io") }
-  }
-}
-
 rootProject.name = "AndroidIDE"
 
+// keep this sorted alphabetically
 include(
-  ":annotation-processors",
-  ":annotation-processors-ksp",
-  ":annotations",
-  ":actions",
-  ":app",
-  ":build-info",
-  ":common",
-  ":editor",
-  ":editor-api",
-  ":editor-treesitter",
-  ":eventbus",
-  ":eventbus-android",
-  ":eventbus-events",
-  ":gradle-plugin",
-  ":gradle-plugin-config",
-  ":idestats",
-  ":lexers",
-  ":logger",
-  ":logsender",
-  ":logsender-sample",
-  ":lookup",
-  ":preferences",
-  ":resources",
-  ":shared",
-  ":templates-api",
-  ":templates-impl",
-  ":treeview",
-  ":uidesigner",
-  ":xml-inflater",
-  ":lsp:api",
-  ":lsp:models",
-  ":lsp:java",
-  ":lsp:xml",
-  ":subprojects:aaptcompiler",
-  ":subprojects:appintro",
-  ":subprojects:builder-model-impl",
-  ":subprojects:flashbar",
-  ":subprojects:framework-stubs",
-  ":subprojects:fuzzysearch",
-  ":subprojects:google-java-format",
-  ":subprojects:java-compiler",
-  ":subprojects:javac",
-  ":subprojects:javac-services",
-  ":subprojects:javapoet",
-  ":subprojects:jaxp",
-  ":subprojects:jdk-compiler",
-  ":subprojects:jdk-jdeps",
-  ":subprojects:jdt",
-  ":subprojects:layoutlib-api",
-  ":subprojects:projects",
-  ":subprojects:tooling-api",
-  ":subprojects:tooling-api-events",
-  ":subprojects:tooling-api-impl",
-  ":subprojects:tooling-api-model",
-  ":subprojects:xml-dom",
-  ":subprojects:xml-utils",
-  ":termux:termux-app",
-  ":termux:termux-emulator",
-  ":termux:termux-shared",
-  ":termux:termux-view",
-  ":testing:android",
-  ":testing:lsp",
-  ":testing:tooling",
-  ":testing:unit",
+  ":annotation:annotations",
+  ":annotation:processors",
+  ":annotation:processors-ksp",
+  ":core:actions",
+  ":core:app",
+  ":core:common",
+  ":core:indexing-api",
+  ":core:indexing-core",
+  ":core:lsp-api",
+  ":core:lsp-models",
+  ":core:projects",
+  ":core:resources",
+  ":editor:api",
+  ":editor:impl",
+  ":editor:lexers",
+  ":editor:treesitter",
+  ":event:eventbus",
+  ":event:eventbus-android",
+  ":event:eventbus-events",
+  ":java:javac-services",
+  ":java:lsp",
+  ":logging:idestats",
+  ":logging:logger",
+  ":logging:logsender",
+  ":logging:logsender-sample",
+  ":termux:application",
+  ":termux:emulator",
+  ":termux:shared",
+  ":termux:view",
+  ":testing:androidTest",
+  ":testing:benchmarks",
+  ":testing:commonTest",
+  ":testing:gradleToolingTest",
+  ":testing:lspTest",
+  ":testing:unitTest",
+  ":tooling:api",
+  ":tooling:builder-model-impl",
+  ":tooling:events",
+  ":tooling:impl",
+  ":tooling:model",
+  ":tooling:plugin",
+  ":tooling:plugin-config",
+  ":utilities:build-info",
+  ":utilities:flashbar",
+  ":utilities:framework-stubs",
+  ":utilities:lookup",
+  ":utilities:preferences",
+  ":utilities:shared",
+  ":utilities:templates-api",
+  ":utilities:templates-impl",
+  ":utilities:treeview",
+  ":utilities:uidesigner",
+  ":utilities:xml-inflater",
+  ":xml:aaptcompiler",
+  ":xml:dom",
+  ":xml:lsp",
+  ":xml:resources-api",
+  ":xml:utils",
 )
 
 object FDroidConfig {

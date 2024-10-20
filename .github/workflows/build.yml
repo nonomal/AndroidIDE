@@ -2,7 +2,7 @@ name: Build and test
 
 on:
   push:
-    branches: [ "dev", "main", "release/**" ]
+    branches: [ "dev", "main", "indexing", "release/**" ]
     paths-ignore:
       - '**.md'
       - 'fastlane/**'
@@ -37,7 +37,7 @@ env:
 
   # Build configuration
   BUILD_JAVA_VERSION: '17'
-  BUILD_JAVA_DIST: 'temurin'
+  BUILD_JAVA_DIST: 'adopt'
   BUILD_IS_RELEASE: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/**' }}
   ReleaseAndroidIDE: ${{ github.ref == 'refs/heads/main' }}
 
@@ -50,12 +50,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Cancel previous runs
-        uses: styfle/cancel-workflow-action@0.12.0
+        uses: styfle/cancel-workflow-action@0.12.1
         with:
           access_token: ${{ github.token }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          submodules: 'recursive'
           fetch-depth: 0
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -65,7 +66,7 @@ jobs:
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
       - name: Restore cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -76,28 +77,28 @@ jobs:
       - name: Assemble ${{ matrix.build_type }} APK
         run: |
           build_type=${{ matrix.build_type }}
-          ./gradlew :app:assemble${build_type^}
+          ./gradlew :core:app:assemble${build_type^}
       - name: Copy ${{ matrix.build_type }} APK
         run: |
-          cp app/build/outputs/apk/${{ matrix.build_type }}/app-*.apk ./
+          cp core/app/build/outputs/apk/${{ matrix.build_type }}/app-*.apk ./
       - name: Upload arm64-v8a ${{ matrix.build_type }} APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: apk-arm64-v8a-${{ matrix.build_type }}
           path: app-arm64-v8a-${{ matrix.build_type }}.apk
       - name: Upload armeabi-v7a ${{ matrix.build_type }} APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: apk-armeabi-v7a-${{ matrix.build_type }}
           path: app-armeabi-v7a-${{ matrix.build_type }}.apk
       - name: Upload x86_64 ${{ matrix.build_type }} APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: apk-x86_64-${{ matrix.build_type }}
           path: app-x86_64-${{ matrix.build_type }}.apk
       - name: Upload ${{ matrix.build_type }} mappings
-        if: ${{ matrix.build_type == 'release' }}
-        uses: actions/upload-artifact@v3
+        if: ${{ always() && matrix.build_type == 'release' }}
+        uses: actions/upload-artifact@v4
         with:
           name: release-mappings
           path: '**/build/outputs/mapping'
@@ -109,6 +110,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          submodules: 'recursive'
           fetch-depth: 0
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -118,7 +120,7 @@ jobs:
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
       - name: Restore cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -132,7 +134,7 @@ jobs:
           ANDROIDIDE_TEST: true
       - name: Upload test reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-unit-tests
           path: '**/build/reports/tests/'
@@ -144,6 +146,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          submodules: 'recursive'
           fetch-depth: 0
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -153,7 +156,7 @@ jobs:
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
       - name: Restore cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -162,42 +165,48 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Run tooling API tests
-        run: ./gradlew :subprojects:tooling-api-impl:build --continue
+        run: ./gradlew :tooling:impl:build --continue
         env:
           ANDROIDIDE_TEST: true
           TEST_TOOLING_API_IMPL: true
       - name: Upload test reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-tooling-api-tests
           path: '**/build/reports/tests/'
 
   run_connected_checks:
     name: Run connected checks
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        api-level: [ 26, 29, 32 ]
+        api-level: [ 26, 32 ]
         target: [ default ]
     steps:
       - name: Cancel previous runs
-        uses: styfle/cancel-workflow-action@0.12.0
+        uses: styfle/cancel-workflow-action@0.12.1
         with:
           access_token: ${{ github.token }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          submodules: 'recursive'
           fetch-depth: 0
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.BUILD_JAVA_VERSION }}
           distribution: ${{ env.BUILD_JAVA_DIST }}
+      - name: Enable KVM group perms
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
       - name: Restore cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -212,12 +221,18 @@ jobs:
           target: ${{ matrix.target }}
           arch: x86_64
           profile: Nexus 6
-          script: ./gradlew connectedCheck
+          script: ./gradlew connectedCheck --info --stacktrace
+      - name: Upload test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-android-tests-${{ matrix.api-level }}-${{ matrix.target }}
+          path: '**/build/reports/androidTests/'
 
   publish:
     name: Publish release
     runs-on: ubuntu-latest
-    needs: [ build_apk, run_unit_tests, run_tooling_api_tests, run_connected_checks ]
+    needs: [ build_apk, run_unit_tests, run_tooling_api_tests ]
     if: |
       always()
       && github.ref == 'refs/heads/main'
@@ -225,11 +240,11 @@ jobs:
       && needs.build_apk.result == 'success'
       && needs.run_unit_tests.result == 'success'
       && needs.run_tooling_api_tests.result == 'success'
-      && needs.run_connected_checks.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          submodules: 'recursive'
           fetch-depth: 0
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -237,21 +252,21 @@ jobs:
           java-version: ${{ env.BUILD_JAVA_VERSION }}
           distribution: ${{ env.BUILD_JAVA_DIST }}
       - name: Download arm64-v8a APK
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: apk-arm64-v8a-release
       - name: Download x86_64 APK
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: apk-x86_64-release
       - name: Download armeabi-v7a APK
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: apk-armeabi-v7a-release
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
       - name: Restore cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
@@ -260,14 +275,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Generate checksums
-        run:
-          md5sum *.apk > CHECKSUMS-md5.txt
-          sha256sum *.apk > CHECKSUMS-sha256.txt
-          sha512sum *.apk > CHECKSUMS-sha512.txt
+        run: |
+          mkdir -p build
+          
+          md5sum *.apk > build/CHECKSUMS-md5.txt
+          sha256sum *.apk > build/CHECKSUMS-sha256.txt
+          sha512sum *.apk > build/CHECKSUMS-sha512.txt
+          
+          find build -type f -name "CHECKSUMS*.txt" -exec echo {} \; -exec cat {} \; -exec echo "" \;
       - name: Publish release
         run: ./gradlew nyxMake nyxMark nyxPublish publish release --stacktrace
       - name: Archive Nyx state file
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: .nyx-state-${{ github.job }}.json
@@ -282,6 +301,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          submodules: 'recursive'
           fetch-depth: 0
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -291,7 +311,7 @@ jobs:
       - name: Change Gradle wrapper permissions
         run: chmod +x ./gradlew
       - name: Restore cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
